@@ -1,10 +1,6 @@
 import requests
 from lxml import html
-from concurrent.futures import ThreadPoolExecutor,as_completed
-from selenium.common.exceptions import NoSuchElementException
 from selenium import webdriver
-from time import perf_counter
-import urllib
 
 def write_file(names,links):
     """writes data to csv in form name,url
