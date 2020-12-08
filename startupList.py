@@ -2,7 +2,9 @@ import requests
 from lxml import html
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException,TimeoutException
 
 def write_file(names,links):
     """writes data to csv in form name,url
@@ -46,14 +48,32 @@ def checkIfSiteExists(url,timeout):
         pass
     return fl
 
+def FindOneByCss(driver,selector):
+    element = ""
+    try:
+        element = driver.find_element_by_css_selector(selector)
+    except NoSuchElementException:
+        pass
+    return element
+
+def FindAllByCss(driver,selector):
+    elements = ""
+    try:
+        elements = driver.find_elements_by_css_selector(selector)
+    except NoSuchElementException:
+        pass
+    return elements
+
 def parseCrunchPage(driver):
     """
     driver will be webdriver object from selenium
     data will contain these keys
     "headquarters","industries","founder","founded_in",
     "funding","team_size","contact_email",
-    "contact_phone","description"
+    "contact_phone","description","url"
     fackebook_link,twitter_link,linkendin_link
+    https://www.crunchbase.com/organization/trilongo
+    https://www.crunchbase.com/organization/wish
     """
     data = {}
     mapping = {
@@ -82,26 +102,56 @@ def parseCrunchPage(driver):
             "key":"team_size"
         }
     }
-    arr = WebDriverWait(driver,4).until(EC.presence_of_element_located((By.CSS_SELECTOR,"fields-card>ul")))
-    data["headquarters"] = ','.join(map(lambda x:x.text,arr[0].find_elements_by_css_selector("span>a")))
-    data["industries"] = ','.join(map(lambda x:x.text,arr[1].find_elements_by_css_selector("mat-chip")))
-    data["description"] = driver.find_element_by_css_selector("description-card>div>span").text
-    for li in arr[4].find_elements_by_css_selector("li"):
-        anchor_tag = li.find_element_by_css_selector("a")
-        site = anchor_tag.get_property("title").split()[-1].lower().strip()
-        data[f"{site}_link"] = anchor_tag.get_property("href")
-    arr1 = arr[1].find_elements_by_css_selector('li') 
-    arr1 += arr[3].find_elements_by_css_selector('li')
-    arr1 += driver.find_elements_by_css_selector("anchored-values>a")
-    for li in arr1:
-        value = ""
-        fName_list = [*map(lambda x:x.text.lower().strip(),li.find_elements_by_css_selector("span>span"))]
+    def setSingle(key,driver,selector,prop="",text=False):
+        value = FindOneByCss(driver,selector)
+        if value:
+            if prop:
+                value = value.get_property(prop)
+            elif text:
+                value = value.text
+            data[key] = value
+    def setSingle1(key,driver,selector,func=None):
+        values = FindAllByCss(driver,selector)
+        if values:
+            if func:
+                values = [*map(func,values)]
+            data[key] = ",".join(values)
+
+    try:
+        arr = WebDriverWait(driver,4).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR,"fields-card>ul")))
+    except TimeoutException:
+        arr = []
+
+    if len(arr) == 0:
+        return data
+
+    setSingle("url",arr[0],"link-formatter>a",prop="href")
+    setSingle("description",driver,"description-card>div>span",text=True)
+    setSingle1("headquarters",arr[0],"span>a",func=lambda x:x.text.strip())
+    if len(arr) >= 2:
+        setSingle1("industries",arr[1],"mat-chip",func=lambda x:x.text.strip())
+
+    anchor_tags = FindAllByCss(arr[-1],"link-formatter>a")
+    if len(anchor_tags):
+        for anchor_tag in anchor_tags:
+            site = anchor_tag.get_property("title").split()[-1].lower().strip()
+            data[f"{site}_link"] = anchor_tag.get_property("href")
+    arr1 = FindAllByCss(arr[1],'li')
+    if len(arr)>=4:
+        arr1 += FindAllByCss(arr[3],'li')
+    a = FindAllByCss(driver,"anchored-values>a")
+    if a:
+        arr1 += a
+    for elem in arr1:
+        fName_list = [*map(lambda x:x.text.lower().strip(),FindAllByCss(elem,"span>span"))]
+        if len(fName_list) == 0:
+            continue
         name = fName_list[0]
-        if name == "":
+        if name == "" and len(fName_list)>=2:
             name = fName_list[1]
         if name in ["industries","headquarters"] or name not in mapping:
             continue
-        value = li.find_elements_by_css_selector(mapping[name]["selector"])
+        value = FindAllByCss(elem,mapping[name]["selector"])
         val = ""
         if name == "founders":
             val = ",".join(map(lambda x:x.text, value))
