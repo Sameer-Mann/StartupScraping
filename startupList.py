@@ -1,6 +1,8 @@
 import requests
 from lxml import html
 from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 def write_file(names,links):
     """writes data to csv in form name,url
@@ -44,7 +46,7 @@ def checkIfSiteExists(url,timeout):
         pass
     return fl
 
-def parseCrunchPage(driver,url):
+def parseCrunchPage(driver):
     """
     driver will be webdriver object from selenium
     data will contain these keys
@@ -53,7 +55,6 @@ def parseCrunchPage(driver,url):
     "contact_phone","description"
     fackebook_link,twitter_link,linkendin_link
     """
-    driver.get(url)
     data = {}
     mapping = {
         "founded":{
@@ -81,19 +82,14 @@ def parseCrunchPage(driver,url):
             "key":"team_size"
         }
     }
-    arr = driver.find_elements_by_css_selector("fields-card>ul")
-
-    data["headquarters"] = ','.join(map(lambda x:x.text,
-        arr[0].find_elements_by_css_selector("span>a")))
-
-    data["industries"] = ','.join(map(lambda x:x.text,
-        arr[1].find_elements_by_css_selector("mat-chip")))
-
+    arr = WebDriverWait(driver,4).until(EC.presence_of_element_located((By.CSS_SELECTOR,"fields-card>ul")))
+    data["headquarters"] = ','.join(map(lambda x:x.text,arr[0].find_elements_by_css_selector("span>a")))
+    data["industries"] = ','.join(map(lambda x:x.text,arr[1].find_elements_by_css_selector("mat-chip")))
+    data["description"] = driver.find_element_by_css_selector("description-card>div>span").text
     for li in arr[4].find_elements_by_css_selector("li"):
         anchor_tag = li.find_element_by_css_selector("a")
         site = anchor_tag.get_property("title").split()[-1].lower().strip()
         data[f"{site}_link"] = anchor_tag.get_property("href")
-
     arr1 = arr[1].find_elements_by_css_selector('li') 
     arr1 += arr[3].find_elements_by_css_selector('li')
     arr1 += driver.find_elements_by_css_selector("anchored-values>a")
@@ -112,5 +108,4 @@ def parseCrunchPage(driver,url):
         else:
             val = value[0].text
         data[mapping[name]["key"]] = val
-
     return data
