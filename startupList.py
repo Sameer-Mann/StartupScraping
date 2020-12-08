@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException,TimeoutException
+from time import sleep
 
 def write_file(names,links):
     """writes data to csv in form name,url
@@ -72,9 +73,8 @@ def parseCrunchPage(driver):
     "funding","team_size","contact_email",
     "contact_phone","description","url"
     fackebook_link,twitter_link,linkendin_link
-    https://www.crunchbase.com/organization/trilongo
-    https://www.crunchbase.com/organization/wish
     """
+    sleep(2)
     data = {}
     mapping = {
         "founded":{

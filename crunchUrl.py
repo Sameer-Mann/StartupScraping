@@ -2,15 +2,15 @@ from selenium import webdriver
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException,TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException,TimeoutException,WebDriverException
+from traceback import print_stack
 
 from json.decoder import JSONDecodeError
 from json import load,dump
 from time import sleep
 from random import randrange
-
 from startupList import read_file,parseCrunchPage
 
 base_url = "https://www.crunchbase.com"
@@ -58,7 +58,6 @@ def search(driver,name):
 def getUrlObjects(driver,discovered):
     """also adds the current urls to data"""
     names = []
-    anchor_tags = []
     try:
         anchor_tags = driver.find_elements_by_css_selector(
             'search-results-section[class="ng-star-inserted"]>mat-card>a')
@@ -69,9 +68,11 @@ def getUrlObjects(driver,discovered):
             discovered[name] = url
     except NoSuchElementException:
         pass
-    return names,anchor_tags
+    return names
 
-def parseLink(names,anchor_tags,driver,final_data):
+def parseLink(names,driver,final_data):
+    anchor_tags = anchor_tags = driver.find_elements_by_css_selector(
+            'search-results-section[class="ng-star-inserted"]>mat-card>a')
     idx = randrange(0,len(anchor_tags))
     anchor_tags[idx].click()
     data = parseCrunchPage(driver)
@@ -99,23 +100,32 @@ def crunch():
     
     values,anchor_tags = [],[]
 
-    for _,name in enumerate(names):
+    for i,name in enumerate(names):
         if name in searched:
+            print(f"Skipping {i}th")
             continue
         try:
             chosen = randrange(1,3)
+            if chosen == 2 and len(values) == 0:
+                if name in discovered:
+                    driver.get(discovered[name])
+                    final_data[name] = parseCrunchPage(driver)
+                continue
+            if chosen == 1:
+                search(driver,name)
+                values = getUrlObjects(driver,discovered)
+                searched[name]=True
+            elif len(values):
+                parseLink(values,driver,final_data)
+                values = []
             x = randrange(6,12)
             print(f"Sleeping {x}s")
             sleep(x)
-
-            if chosen == 1:
-                search(driver,name)
-                values,anchor_tags = getUrlObjects(driver,discovered)
-                searched[name]=True
-            elif len(values):
-                parseLink(values,anchor_tags,driver,final_data)
-                values = []
-        except:
+        except KeyboardInterrupt:
+            break
+        except WebDriverException as e:
+            print_stack(limit=1)
+            print(e)
             break
 
     write(final_data,"data")
