@@ -65,7 +65,7 @@ def FindAllByCss(driver,selector):
         pass
     return elements
 
-def parseCrunchPage(driver):
+def parseCrunchPage(driver,url):
     """
     driver will be webdriver object from selenium
     data will contain these keys
@@ -74,6 +74,7 @@ def parseCrunchPage(driver):
     "contact_phone","description","url"
     fackebook_link,twitter_link,linkendin_link
     """
+    driver.get(url)
     sleep(2)
     data = {}
     mapping = {

@@ -1,10 +1,11 @@
 from selenium import webdriver
-from selenium.webdriver.common.proxy import Proxy, ProxyType
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException,TimeoutException,WebDriverException
+
+from selenium.webdriver.common.proxy import Proxy, ProxyType
 from traceback import print_stack
 
 from json.decoder import JSONDecodeError
@@ -12,25 +13,33 @@ from json import load,dump
 from time import sleep
 from random import randrange
 from startupList import read_file,parseCrunchPage,FindAllByCss,FindOneByCss
+from concurrent.futures import ThreadPoolExecutor,as_completed
+from urllib3.exceptions import HTTPError
+from random import shuffle
+# from http_request_randomizer.requests.proxy.requestProxy import RequestProxy
 
 base_url = "https://www.crunchbase.com"
 
 def getNamesAndLinks():
     data = read_file()
-    return [*data.keys()],[*data.values()]
+    return set([*data.keys()]),set([*data.values()])
 
 def write(data,file_name):
     with open(f"{file_name}.json","w") as f:
         dump(data,f)
 
 def getDrivers():
-    driver1 = webdriver.Chrome()
-    driver1.get(base_url)
-    driver1.maximize_window()
-    driver = webdriver.Firefox()
-    driver.get(base_url)
-    driver1.maximize_window()
-    return [driver,driver1]
+    co1 = webdriver.ChromeOptions()
+    co1.add_argument("--headless")
+
+    co2 = webdriver.FirefoxOptions()
+    co2.add_argument("--headless")
+
+    drivers = [webdriver.Firefox(options=co2),webdriver.Safari()]
+    # co.add_argument("log-level=3")
+    for driver in drivers:
+        driver.maximize_window()
+    return drivers
 
 def search(driver,name):
     try:
@@ -84,15 +93,11 @@ def loadData(name):
     return data
 
 def changeDriver(drivers,driver):
-    if driver == drivers[0]:
-        return drivers[1]
-    return drivers[0]
+    idx = drivers.index(driver)
+    return drivers[(idx+1)%len(drivers)]
 
 def crunch():
-    # driver = webdriver.Chrome(desired_capabilities=proxy())
     drivers = getDrivers()
-    # driver = drivers[0]
-    # driver.get(base_url)
     names,links = getNamesAndLinks()
 
     final_data = loadData("data")
@@ -142,5 +147,58 @@ def crunch():
     write(discovered,"discovered")
     drivers[0].quit()
     drivers[1].quit()
+
+def indiaData():
+    drivers = getDrivers()
+    names,links = getNamesAndLinks()
+    final_data = loadData("data")
+    india_data = loadData("india")
+    discovered = loadData("discovered")
+    driver = drivers[0]
+    urls = []
+    names1 = [*discovered.keys()]
+    shuffle(names1)
+    names1 = names1[:90]
+    for _,name in enumerate(names1):
+        if name in final_data:
+            continue
+        try:
+            urls.append(base_url+f"/organization/{discovered[name]}")
+            if len(urls) == 2:
+                with ThreadPoolExecutor() as exc:
+                    results = [exc.submit(parseCrunchPage,drivers[i],urls[i]) for i in range(2)]
+                    for i,res in enumerate(as_completed(results)):
+                        data = res.result()
+                        if len(data) == 0:
+                            print(f"Failed {urls[i]}")
+                            continue
+                        print(f"Succes {urls[i]}")
+                        if "headquarters" in data and data["headquarters"].split(",")[-1] == "India":
+                            india_data[name] = data
+                        else:
+                            final_data[name] = data
+                urls = []
+                x=randrange(5,8)
+                print(f"Sleeping {x}s")
+                sleep(x)
+        except KeyboardInterrupt:
+            break
+        except WebDriverException as e:
+            print_stack()
+            print(e)
+            break
+        except Exception as e:
+            print_stack()
+            print(e)
+            break
+        except:
+            break
+
+    write(india_data,"india")
+    write(final_data,"data")
+
+    for driver in drivers:
+        driver.quit()
+
 if __name__ == '__main__':
-    crunch()
+    indiaData()
